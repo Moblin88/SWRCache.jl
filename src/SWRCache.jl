@@ -36,10 +36,6 @@ function isstale(entry, now_utc=now(UTC))
     return !isnothing(entry) && (entry.expires_at < now_utc <= entry.stale_until)
 end
 
-function isrevalidate(entry, now_utc=now(UTC))
-    return isnothing(entry) || (now_utc > entry.stale_until)
-end
-
 function CacheEntry(value::V, expires_at::DateTime, stale_until::DateTime) where {V}
     return CacheEntry{V}(value, expires_at, stale_until)
 end
