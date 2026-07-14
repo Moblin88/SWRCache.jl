@@ -98,10 +98,8 @@ function cache_get!(cache::SWRMemoryCache)
         return entry.value
     elseif isstale(entry, now_utc)
         trylock(cache.lock) || return entry.value
-    elseif isrevalidate(entry, now_utc)
-        lock(cache.lock)
     else
-        error("Unexpected cache state.")
+        lock(cache.lock)
     end
     try
         entry = @atomic :monotonic cache.entry

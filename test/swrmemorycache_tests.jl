@@ -141,3 +141,35 @@ end
     cache = SWRMemoryCache(fetcher)
     @test @inferred(cache_get!(cache)) == 42
 end
+
+@testitem "Constructor with explicit entry seeds cache without immediate fetch" begin
+    using SWRCache
+    using Test
+    using Dates
+
+    fetch_count = Ref(0)
+    function fetcher()
+        fetch_count[] += 1
+        now_utc = now(UTC)
+        return CacheEntry(
+            100 + fetch_count[],
+            now_utc + Millisecond(300),
+            now_utc + Millisecond(600),
+        )
+    end
+
+    now_utc = now(UTC)
+    seeded_entry = CacheEntry(
+        7,
+        now_utc + Millisecond(150),
+        now_utc + Millisecond(450),
+    )
+    cache = SWRMemoryCache(fetcher, seeded_entry)
+
+    @test @inferred(cache_get!(cache)) == 7
+    @test fetch_count[] == 0
+
+    sleep(0.2)
+    @test @inferred(cache_get!(cache)) == 101
+    @test fetch_count[] == 1
+end
