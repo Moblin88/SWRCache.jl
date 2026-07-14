@@ -6,7 +6,7 @@ using TestItems
     using Dates
 
     fetch_count = Ref(0)
-    fetcher() = begin
+    function fetcher()
         fetch_count[] += 1
         now_utc = now(UTC)
         return CacheEntry(
@@ -30,7 +30,7 @@ end
     using Dates
 
     fetch_count = Ref(0)
-    fetcher() = begin
+    function fetcher()
         fetch_count[] += 1
         sleep(0.15)
         now_utc = now(UTC)
@@ -54,7 +54,7 @@ end
     using Dates
 
     fetch_count = Ref(0)
-    fetcher() = begin
+    function fetcher()
         fetch_count[] += 1
         sleep(0.2)
         now_utc = now(UTC)
@@ -78,7 +78,7 @@ end
     using Dates
 
     fetch_count = Ref(0)
-    fetcher() = begin
+    function fetcher()
         fetch_count[] += 1
         now_utc = now(UTC)
         return CacheEntry(
@@ -104,7 +104,7 @@ end
     using Dates
 
     fetch_count = Ref(0)
-    fetcher() = begin
+    function fetcher()
         fetch_count[] += 1
         now_utc = now(UTC)
         return CacheEntry(
@@ -130,7 +130,7 @@ end
     using Test
     using Dates
 
-    fetcher() = begin
+    function fetcher()
         now_utc = now(UTC)
         return CacheEntry(
             42,
