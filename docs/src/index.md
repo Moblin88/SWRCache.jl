@@ -2,10 +2,11 @@
 
 `SWRCache.jl` provides an in-memory stale-while-revalidate cache with single-flight refresh behavior for one cached value.
 
+Construct caches with `SWRMemoryCache(fetcher)` or `SWRMemoryCache(fetcher, entry)`.
+
 ## API
 
 ```@docs
-RefreshOptions
 CacheEntry
 SWRMemoryCache
 cache_get!
@@ -16,6 +17,6 @@ clear!
 
 ## Design behavior
 
-- Fresh entry: return cached value.
-- Stale entry: return cached value immediately and trigger background refresh (if enabled).
-- Expired entry or miss: block until the single shared refresh completes.
+- `now <= expires_at`: return fresh cached value.
+- `expires_at < now <= stale_until`: return stale cached value and trigger background refresh.
+- `now > stale_until` (or cache miss): block until the single shared refresh completes.

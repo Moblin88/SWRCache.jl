@@ -3,157 +3,130 @@ module SWRCache
 using Base.Threads
 using Dates
 
-export CacheEntry, RefreshOptions, SWRMemoryCache, cache_get!, clear!, invalidate!, refresh!
+export CacheEntry, SWRMemoryCache, cache_get!, clear!, invalidate!, refresh!
 
-Base.@kwdef struct RefreshOptions
-    ttl_seconds::Float64 = 30.0
-    stale_ttl_seconds::Float64 = 120.0
-    refresh_on_stale_access::Bool = true
-    async_refresh::Bool = true
-end
+"""
+    CacheEntry(value, expires_at, stale_until)
 
-mutable struct CacheEntry{V}
+Represents one cached value and its serve-time boundaries.
+
+Time semantics:
+- `now <= expires_at`: value is fresh.
+- `expires_at < now <= stale_until`: value is soft-expired and may be served stale.
+- `now > stale_until`: value is hard-expired and must be refreshed before serving.
+"""
+struct CacheEntry{V}
     value::V
-    refreshed_at::DateTime
+    # Value is fresh through this timestamp (inclusive).
     expires_at::DateTime
+    # Value may still be served stale through this timestamp (inclusive).
+    # After this, reads must block for refresh.
     stale_until::DateTime
-    last_refresh_error::Union{Nothing,Exception}
+    function CacheEntry{V}(value::V, expires_at::DateTime, stale_until::DateTime) where {V}
+        expires_at <= stale_until || error("CacheEntry must satisfy expires_at <= stale_until.")
+        new{V}(value, expires_at, stale_until)
+    end
 end
 
-mutable struct SWRMemoryCache{F}
-    fetcher::F
-    options::RefreshOptions
-    lock::ReentrantLock
-    entry::Union{Nothing,CacheEntry}
-    inflight::Union{Nothing,Task}
-    @atomic refresh_inflight::Bool
-    @atomic expires_at_unix_ms::Int64
-    @atomic stale_until_unix_ms::Int64
+function isfresh(entry, now_utc=now(UTC))
+    return !isnothing(entry) && now_utc <= entry.expires_at
 end
 
-function SWRMemoryCache(fetcher::F; options::RefreshOptions = RefreshOptions()) where {F}
-    _validate_options(options)
-    return SWRMemoryCache{F}(fetcher, options, ReentrantLock(), nothing, nothing, false, 0, 0)
+function isstale(entry, now_utc=now(UTC))
+    return !isnothing(entry) && (entry.expires_at < now_utc <= entry.stale_until)
 end
 
+function isrevalidate(entry, now_utc=now(UTC))
+    return isnothing(entry) || (now_utc > entry.stale_until)
+end
+
+function CacheEntry(value::V, expires_at::DateTime, stale_until::DateTime) where {V}
+    return CacheEntry{V}(value, expires_at, stale_until)
+end
+
+mutable struct SWRMemoryCache{F,V<:CacheEntry}
+    const fetcher::F
+    const lock::ReentrantLock
+    @atomic entry::Union{Nothing,V}
+    function SWRMemoryCache{F,V}(fetcher::F, entry::Union{Nothing,V}) where {F,V}
+        new{F,V}(fetcher, ReentrantLock(), entry)
+    end
+end
+
+function fetch(cache::SWRMemoryCache{F,V}) where {F,V}
+    return cache.fetcher()::V
+end
+
+"""
+    SWRMemoryCache(fetcher)
+    SWRMemoryCache(fetcher, entry)
+
+Constructs an in-memory cache around a `fetcher` that returns `CacheEntry` values.
+"""
+function SWRMemoryCache(fetcher::F, entry::V) where {F,V}
+    return SWRMemoryCache{F,V}(fetcher, entry)
+end
+
+function SWRMemoryCache(fetcher::F) where {F}
+    entry = fetcher()
+    return SWRMemoryCache{F,typeof(entry)}(
+        fetcher,
+        entry
+    )
+end
+
+"""
+    cache_get!(cache)
+
+Returns the cached value using stale-while-revalidate semantics.
+
+- Fresh entries are returned immediately.
+- Soft-expired entries are returned stale and always trigger background refresh.
+- Hard-expired entries (or cache misses) block until the shared refresh task
+  completes.
+"""
 function cache_get!(cache::SWRMemoryCache)
-    while true
-        now_utc = now(UTC)
-        now_ms = _datetime_to_unix_ms(now_utc)
-        stale_deadline_ms = @atomic cache.stale_until_unix_ms
-
-        if stale_deadline_ms > 0 && now_ms <= stale_deadline_ms
-            entry = @lock cache.lock cache.entry
-            if entry !== nothing && _is_fresh(entry, now_utc)
-                return entry.value
-            end
-            if entry !== nothing && _is_stale(entry, now_utc)
-                if cache.options.refresh_on_stale_access && cache.options.async_refresh && !(@atomic cache.refresh_inflight)
-                    _ensure_refresh_task!(cache)
-                end
-                return entry.value
-            end
-        end
-
-        refresh_task = _ensure_refresh_task!(cache)
-        wait(refresh_task)
+    entry = @atomic :acquire cache.entry
+    now_utc = now(UTC)
+    if isfresh(entry, now_utc)
+        return entry.value
+    elseif isstale(entry, now_utc)
+        trylock(cache.lock) || return entry.value::V
+    elseif isrevalidate(entry, now_utc)
+        lock(cache.lock)
+    else
+        error("Unexpected cache state.")
+    end
+    try
+        entry = @atomic :monotonic cache.entry
+        isfresh(entry, now_utc) && return entry.value::V
+        entry = fetch(cache)
+        @atomic :release cache.entry = entry
+        return entry.value::V
+    finally
+        unlock(cache.lock)
     end
 end
 
 function refresh!(cache::SWRMemoryCache)
-    refresh_task = _ensure_refresh_task!(cache)
-    wait(refresh_task)
-    return cache_get!(cache)
+    lock(cache.lock)
+    try
+        entry = fetch(cache)
+        @atomic :release cache.entry = entry
+        return entry.value
+    finally
+        unlock(cache.lock)
+    end
 end
 
 function invalidate!(cache::SWRMemoryCache)
-    had_entry = @lock cache.lock begin
-        existing = cache.entry !== nothing
-        cache.entry = nothing
-        @atomic cache.expires_at_unix_ms = 0
-        @atomic cache.stale_until_unix_ms = 0
-        existing
-    end
-    return had_entry
+    old_entry = @atomicswap :acquire_release cache.entry = nothing
+    return !isnothing(old_entry)
 end
 
 function clear!(cache::SWRMemoryCache)
-    @lock cache.lock begin
-        cache.entry = nothing
-        @atomic cache.expires_at_unix_ms = 0
-        @atomic cache.stale_until_unix_ms = 0
-    end
+    @atomic :release cache.entry = nothing
     return cache
-end
-
-function _validate_options(options::RefreshOptions)
-    options.ttl_seconds > 0 || error("RefreshOptions.ttl_seconds must be > 0.")
-    options.stale_ttl_seconds >= 0 || error("RefreshOptions.stale_ttl_seconds must be >= 0.")
-    return nothing
-end
-
-_is_fresh(entry::CacheEntry, now_utc::DateTime) = now_utc <= entry.expires_at
-_is_stale(entry::CacheEntry, now_utc::DateTime) = now_utc <= entry.stale_until
-
-function _ensure_refresh_task!(cache::SWRMemoryCache)
-    return @lock cache.lock begin
-        existing_task = cache.inflight
-        if existing_task !== nothing
-            existing_task
-        else
-            refresh_task = Threads.@spawn _refresh_value!(cache)
-            cache.inflight = refresh_task
-            @atomic cache.refresh_inflight = true
-            errormonitor(refresh_task)
-            refresh_task
-        end
-    end
-end
-
-_duration_milliseconds(seconds::Float64) = Millisecond(round(Int, seconds * 1000))
-
-function _datetime_to_unix_ms(dt::DateTime)
-    return round(Int64, datetime2unix(dt) * 1000)
-end
-
-function _refresh_value!(cache::SWRMemoryCache)
-    refreshed_entry = nothing
-    refresh_error = nothing
-    try
-        refreshed_value = cache.fetcher()
-        refreshed_at = now(UTC)
-        ttl_duration = _duration_milliseconds(cache.options.ttl_seconds)
-        stale_duration = _duration_milliseconds(cache.options.stale_ttl_seconds)
-        refreshed_entry = CacheEntry(
-            refreshed_value,
-            refreshed_at,
-            refreshed_at + ttl_duration,
-            refreshed_at + ttl_duration + stale_duration,
-            nothing,
-        )
-        return refreshed_value
-    catch err
-        refresh_error = err
-        rethrow()
-    finally
-        @lock cache.lock begin
-            if refreshed_entry !== nothing
-                cache.entry = refreshed_entry
-                @atomic cache.expires_at_unix_ms = _datetime_to_unix_ms(refreshed_entry.expires_at)
-                @atomic cache.stale_until_unix_ms = _datetime_to_unix_ms(refreshed_entry.stale_until)
-            elseif refresh_error !== nothing
-                existing = cache.entry
-                if existing !== nothing
-                    existing.last_refresh_error = refresh_error
-                end
-            else
-                @atomic cache.expires_at_unix_ms = 0
-                @atomic cache.stale_until_unix_ms = 0
-            end
-            cache.inflight = nothing
-            @atomic cache.refresh_inflight = false
-        end
-    end
 end
 
 end

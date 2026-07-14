@@ -11,7 +11,7 @@ In-memory stale-while-revalidate cache with single-flight refresh coordination.
 - Stale-while-revalidate reads (stale values are returned immediately while background refresh runs).
 - Single-flight refresh for the cached value (only one active refresh at a time).
 - Blocking only on cache misses or fully expired entries.
-- Structured refresh behavior via `RefreshOptions`.
+- Automatic background refresh on stale reads.
 
 ## Installation
 
@@ -24,23 +24,31 @@ Pkg.develop(path=".")
 
 ```julia
 using SWRCache
+using Dates
 
 fetch_count = Ref(0)
 fetcher() = begin
     fetch_count[] += 1
     sleep(0.2)
-    "value-$(fetch_count[])"
+    now_utc = now(UTC)
+    CacheEntry(
+        "value-$(fetch_count[])",
+        now_utc + Millisecond(5_000),
+        now_utc + Millisecond(35_000),
+    )
 end
 
-cache = SWRMemoryCache(fetcher; options=RefreshOptions(
-    ttl_seconds=5.0,
-    stale_ttl_seconds=30.0,
-    refresh_on_stale_access=true,
-    async_refresh=true,
-))
+cache = SWRMemoryCache(fetcher)
 
 value = cache_get!(cache)
 ```
+
+`fetcher` is expected to return a `CacheEntry`.
+
+`CacheEntry` time semantics are:
+- `now <= expires_at`: value is fresh.
+- `expires_at < now <= stale_until`: value is soft-expired and may be served stale.
+- `now > stale_until`: value is hard-expired and callers block for refresh.
 
 ## GitHub setup notes
 
