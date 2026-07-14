@@ -11,8 +11,8 @@ using TestItems
         now_utc = now(UTC)
         return CacheEntry(
             "value-$(fetch_count[])",
-            now_utc + Millisecond(500),
-            now_utc + Millisecond(1000),
+            now_utc + Millisecond(10_000),
+            now_utc + Millisecond(20_000),
         )
     end
     cache = SWRMemoryCache(fetcher)
