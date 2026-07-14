@@ -7,11 +7,14 @@ on:
 
 jobs:
   test:
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        julia-version: ['1.10', '1']
+        julia-version: ['1.12', '1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -23,8 +26,11 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
-      - uses: codecov/codecov-action@v4
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.os == 'ubuntu-latest' && matrix.julia-version == '1'
+      - uses: codecov/codecov-action@v5
         if: matrix.os == 'ubuntu-latest' && matrix.julia-version == '1'
         with:
           files: lcov.info
+          use_oidc: true
           fail_ci_if_error: false

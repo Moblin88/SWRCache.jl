@@ -6,3 +6,6 @@ coverage*.info
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+
+# Local VS Code settings
+.vscode/
