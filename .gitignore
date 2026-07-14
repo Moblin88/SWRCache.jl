@@ -3,6 +3,7 @@ Manifest.toml
 docs/build/
 docs/site/
 coverage*.info
+lcov.info
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
