@@ -62,6 +62,10 @@ end
     SWRMemoryCache(fetcher, entry)
 
 Constructs an in-memory cache around a `fetcher` that returns `CacheEntry` values.
+
+`fetcher` must always return the same concrete `CacheEntry{V}` type for a given
+cache instance. The one-argument constructor eagerly calls `fetcher` once to
+seed the cache.
 """
 function SWRMemoryCache(fetcher::F, entry::V) where {F,V}
     return SWRMemoryCache{F,V}(fetcher, entry)
@@ -81,9 +85,11 @@ end
 Returns the cached value using stale-while-revalidate semantics.
 
 - Fresh entries are returned immediately.
-- Soft-expired entries are returned stale and always trigger background refresh.
-- Hard-expired entries (or cache misses) block until the shared refresh task
-  completes.
+- Soft-expired entries return stale immediately if another refresh is already
+    in progress; otherwise, the calling task performs the refresh before returning.
+- Hard-expired entries (or cache misses) block and refresh before returning.
+
+Refresh work is single-flight: at most one task executes `fetcher` at a time.
 """
 function cache_get!(cache::SWRMemoryCache)
     entry = @atomic :acquire cache.entry
@@ -108,6 +114,12 @@ function cache_get!(cache::SWRMemoryCache)
     end
 end
 
+"""
+    refresh!(cache)
+
+Forces a refresh under the cache lock, stores the new entry, and returns the
+new value.
+"""
 function refresh!(cache::SWRMemoryCache)
     lock(cache.lock)
     try
@@ -119,11 +131,21 @@ function refresh!(cache::SWRMemoryCache)
     end
 end
 
+"""
+    invalidate!(cache)
+
+Atomically clears the current entry and returns `true` if an entry was present.
+"""
 function invalidate!(cache::SWRMemoryCache)
     old_entry = @atomicswap :acquire_release cache.entry = nothing
     return !isnothing(old_entry)
 end
 
+"""
+    clear!(cache)
+
+Clears the current entry and returns `cache`.
+"""
 function clear!(cache::SWRMemoryCache)
     @atomic :release cache.entry = nothing
     return cache
