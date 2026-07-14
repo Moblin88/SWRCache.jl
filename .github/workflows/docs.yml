@@ -14,7 +14,7 @@ jobs:
       contents: write
       pull-requests: read
       statuses: write
-        steps:
+    steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
