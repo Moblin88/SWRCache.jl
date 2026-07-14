@@ -91,7 +91,7 @@ function cache_get!(cache::SWRMemoryCache)
     if isfresh(entry, now_utc)
         return entry.value
     elseif isstale(entry, now_utc)
-        trylock(cache.lock) || return entry.value::V
+        trylock(cache.lock) || return entry.value
     elseif isrevalidate(entry, now_utc)
         lock(cache.lock)
     else
@@ -99,10 +99,10 @@ function cache_get!(cache::SWRMemoryCache)
     end
     try
         entry = @atomic :monotonic cache.entry
-        isfresh(entry, now_utc) && return entry.value::V
+        isfresh(entry, now_utc) && return entry.value
         entry = fetch(cache)
         @atomic :release cache.entry = entry
-        return entry.value::V
+        return entry.value
     finally
         unlock(cache.lock)
     end
