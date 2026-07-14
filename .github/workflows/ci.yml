@@ -7,6 +7,9 @@ on:
 
 jobs:
   test:
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -29,5 +32,5 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.julia-version == '1'
         with:
           files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
           fail_ci_if_error: false
