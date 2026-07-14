@@ -5,13 +5,13 @@ makedocs(
     sitename = "SWRCache.jl",
     modules = [SWRCache],
     format = Documenter.HTML(),
-    repo = Documenter.Remotes.GitHub("Moblin88", "SWRCache"),
+    repo = Documenter.Remotes.GitHub("Moblin88", "SWRCache.jl"),
     pages = [
         "Home" => "index.md",
     ],
 )
 
 deploydocs(
-    repo = "github.com/Moblin88/SWRCache.git",
+    repo = "github.com/Moblin88/SWRCache.jl.git",
     devbranch = "main",
 )

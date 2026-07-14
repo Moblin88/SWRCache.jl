@@ -1,8 +1,8 @@
 # SWRCache.jl
 
-[![CI](https://github.com/Moblin88/SWRCache/actions/workflows/ci.yml/badge.svg)](https://github.com/Moblin88/SWRCache/actions/workflows/ci.yml)
-[![Docs](https://github.com/Moblin88/SWRCache/actions/workflows/docs.yml/badge.svg)](https://github.com/Moblin88/SWRCache/actions/workflows/docs.yml)
-[![codecov](https://codecov.io/gh/Moblin88/SWRCache/branch/main/graph/badge.svg)](https://codecov.io/gh/Moblin88/SWRCache)
+[![CI](https://github.com/Moblin88/SWRCache.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/Moblin88/SWRCache.jl/actions/workflows/ci.yml)
+[![Docs](https://github.com/Moblin88/SWRCache.jl/actions/workflows/docs.yml/badge.svg)](https://github.com/Moblin88/SWRCache.jl/actions/workflows/docs.yml)
+[![codecov](https://codecov.io/gh/Moblin88/SWRCache.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/Moblin88/SWRCache.jl)
 
 In-memory stale-while-revalidate cache with single-flight refresh coordination.
 
