@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+SWRCache = "0473532c-716d-4582-a3f7-6ceea957fed5"
+
+[compat]
+Documenter = "1"

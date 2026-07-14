@@ -1,0 +1,16 @@
+name = "SWRCache"
+uuid = "0473532c-716d-4582-a3f7-6ceea957fed5"
+authors = ["Nicholas Engelking"]
+version = "0.1.0"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+
+[compat]
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

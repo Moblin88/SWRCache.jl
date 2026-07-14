@@ -1,0 +1,4 @@
+{
+  "julia.environmentPath": "${workspaceFolder}",
+  "julia.numThreads": "auto"
+}
