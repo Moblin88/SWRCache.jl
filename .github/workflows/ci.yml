@@ -33,4 +33,7 @@ jobs:
         with:
           files: lcov.info
           use_oidc: true
+          slug: Moblin88/SWRCache.jl
+          override_branch: ${{ github.ref_name }}
+          override_commit: ${{ github.sha }}
           fail_ci_if_error: false
